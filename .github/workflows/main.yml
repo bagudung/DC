@@ -9,39 +9,35 @@ on:
 
 jobs:
   build-windows:
-    name: Build with FPC (Windows x86_64)
+    name: Build with FPC (Windows)
     runs-on: windows-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup FPC via fpcupdeluxe action
-        uses: gcarreno/setup-lazarus@v3.2.3
+      - name: Install Lazarus + FPC
+        uses: gcarreno/setup-lazarus@v3
         with:
           lazarus-version: "stable"
-          include-portable-exe: true
+          with-cache: false
 
       - name: Show FPC version
-        shell: pwsh
         run: fpc -iV
 
       - name: Create output directories
-        shell: pwsh
         run: |
-          New-Item -ItemType Directory -Force -Path bin | Out-Null
-          New-Item -ItemType Directory -Force -Path output | Out-Null
+          mkdir -p bin
+          mkdir -p output
 
       - name: Build DCU32INT
-        shell: pwsh
         run: |
           fpc -Mdelphi -O2 -FUoutput -FEbin -dXMLx86 DCU32INT.dpr
 
       - name: Verify binary
-        shell: pwsh
         run: |
-          Get-ChildItem bin\
-          & ".\bin\dcu32int.exe" -h
+          dir bin
+          bin\dcu32int.exe -h
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -56,21 +52,6 @@ jobs:
     needs: build-windows
     if: startsWith(github.ref, 'refs/tags/v')
 
-    permissions:
-      contents: write
-
-    steps:
-      - name: Download Windows artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: dcu32int-windows-x86_64
-          path: release/
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          files: release/dcu32int.exe
-          generate_release_notes: true
     permissions:
       contents: write
 
