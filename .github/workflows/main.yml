@@ -19,24 +19,37 @@ jobs:
       - name: Install Free Pascal via Chocolatey
         run: choco install freepascal --no-progress -y
 
-      - name: Find FPC binary path
-        id: find_fpc
+      - name: Set FPC path
         run: |
-          $fpcPath = Get-ChildItem -Path "C:\FPC" -Recurse -Filter "fpc.exe" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty DirectoryName
-          if (-not $fpcPath) {
-            $fpcPath = Get-ChildItem -Path "C:\ProgramData\chocolatey" -Recurse -Filter "fpc.exe" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty DirectoryName
+          # Chocolatey biasanya install FPC ke salah satu path ini
+          $candidates = @(
+            "C:\FPC\3.2.2\bin\x86_64-win64",
+            "C:\FPC\3.2.2\bin\i386-win32",
+            "C:\FPC\bin\x86_64-win64",
+            "C:\FPC\bin\i386-win32"
+          )
+          foreach ($path in $candidates) {
+            if (Test-Path "$path\fpc.exe") {
+              Write-Host "FPC found: $path"
+              echo "FPC_DIR=$path" >> $env:GITHUB_ENV
+              echo "$path" >> $env:GITHUB_PATH
+              exit 0
+            }
           }
-          if (-not $fpcPath) {
-            $fpcPath = Get-ChildItem -Path "C:\" -Recurse -Filter "fpc.exe" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty DirectoryName
+          # Fallback: cari hanya di C:\FPC (tidak rekursif ke seluruh C:\)
+          $found = Get-ChildItem -Path "C:\FPC" -Recurse -Filter "fpc.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($found) {
+            $dir = $found.DirectoryName
+            Write-Host "FPC found (fallback): $dir"
+            echo "FPC_DIR=$dir" >> $env:GITHUB_ENV
+            echo "$dir" >> $env:GITHUB_PATH
+          } else {
+            Write-Error "fpc.exe not found!"
+            exit 1
           }
-          Write-Host "FPC found at: $fpcPath"
-          echo "FPC_DIR=$fpcPath" >> $env:GITHUB_ENV
-          echo "$fpcPath" >> $env:GITHUB_PATH
 
       - name: Show FPC version
-        run: |
-          Write-Host "FPC dir: $env:FPC_DIR"
-          & "$env:FPC_DIR\fpc.exe" -iV
+        run: fpc -iV
 
       - name: Create output directories
         run: |
@@ -44,8 +57,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path output
 
       - name: Build DCU32INT
-        run: |
-          & "$env:FPC_DIR\fpc.exe" -Mdelphi -O2 -FUoutput -FEbin -dXMLx86 DCU32INT.dpr
+        run: fpc -Mdelphi -O2 -FUoutput -FEbin -dXMLx86 DCU32INT.dpr
 
       - name: Verify binary
         run: |
