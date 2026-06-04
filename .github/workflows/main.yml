@@ -8,9 +8,6 @@ on:
   workflow_dispatch:
 
 jobs:
-  # ──────────────────────────────────────────────
-  # Build menggunakan Free Pascal (Windows)
-  # ──────────────────────────────────────────────
   build-windows:
     name: Build with FPC (Windows x86_64)
     runs-on: windows-latest
@@ -22,11 +19,24 @@ jobs:
       - name: Install Free Pascal via Chocolatey
         run: choco install freepascal --no-progress -y
 
-      - name: Refresh PATH
-        run: echo "C:\FPC\3.2.2\bin\x86_64-win64" >> $env:GITHUB_PATH
+      - name: Find FPC binary path
+        id: find_fpc
+        run: |
+          $fpcPath = Get-ChildItem -Path "C:\FPC" -Recurse -Filter "fpc.exe" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty DirectoryName
+          if (-not $fpcPath) {
+            $fpcPath = Get-ChildItem -Path "C:\ProgramData\chocolatey" -Recurse -Filter "fpc.exe" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty DirectoryName
+          }
+          if (-not $fpcPath) {
+            $fpcPath = Get-ChildItem -Path "C:\" -Recurse -Filter "fpc.exe" -ErrorAction SilentlyContinue | Select-Object -First 1 -ExpandProperty DirectoryName
+          }
+          Write-Host "FPC found at: $fpcPath"
+          echo "FPC_DIR=$fpcPath" >> $env:GITHUB_ENV
+          echo "$fpcPath" >> $env:GITHUB_PATH
 
       - name: Show FPC version
-        run: fpc -iV
+        run: |
+          Write-Host "FPC dir: $env:FPC_DIR"
+          & "$env:FPC_DIR\fpc.exe" -iV
 
       - name: Create output directories
         run: |
@@ -35,19 +45,7 @@ jobs:
 
       - name: Build DCU32INT
         run: |
-          fpc `
-            -Mdelphi `
-            -O2 `
-            -FUoutput `
-            -FEbin `
-            -dXMLx86 `
-            DCU32INT.dpr
-        # Keterangan flag:
-        #   -Mdelphi  : mode kompatibilitas Delphi
-        #   -O2       : optimasi level 2
-        #   -FU       : folder untuk .ppu / .o (unit output)
-        #   -FE       : folder untuk binary hasil kompilasi
-        #   -dXMLx86  : aktifkan define XMLx86 (sesuai .dproj)
+          & "$env:FPC_DIR\fpc.exe" -Mdelphi -O2 -FUoutput -FEbin -dXMLx86 DCU32INT.dpr
 
       - name: Verify binary
         run: |
@@ -61,10 +59,6 @@ jobs:
           path: bin\dcu32int.exe
           retention-days: 30
 
-  # ──────────────────────────────────────────────
-  # Release otomatis saat push tag v*.*.*
-  # Contoh: git tag v1.26.1 && git push origin v1.26.1
-  # ──────────────────────────────────────────────
   release:
     name: Create Windows Release
     runs-on: ubuntu-latest
