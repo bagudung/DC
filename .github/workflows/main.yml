@@ -17,52 +17,58 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install Free Pascal via Chocolatey
+        shell: cmd
         run: choco install freepascal --no-progress -y
 
-      - name: Set FPC path
+      - name: Find FPC path (debug)
+        shell: cmd
         run: |
-          # Chocolatey biasanya install FPC ke salah satu path ini
-          $candidates = @(
-            "C:\FPC\3.2.2\bin\x86_64-win64",
-            "C:\FPC\3.2.2\bin\i386-win32",
-            "C:\FPC\bin\x86_64-win64",
-            "C:\FPC\bin\i386-win32"
-          )
-          foreach ($path in $candidates) {
-            if (Test-Path "$path\fpc.exe") {
-              Write-Host "FPC found: $path"
-              echo "FPC_DIR=$path" >> $env:GITHUB_ENV
-              echo "$path" >> $env:GITHUB_PATH
-              exit 0
-            }
-          }
-          # Fallback: cari hanya di C:\FPC (tidak rekursif ke seluruh C:\)
-          $found = Get-ChildItem -Path "C:\FPC" -Recurse -Filter "fpc.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
-          if ($found) {
-            $dir = $found.DirectoryName
-            Write-Host "FPC found (fallback): $dir"
+          echo === Cek C:\FPC ===
+          if exist "C:\FPC" (dir "C:\FPC" /s /b) else (echo C:\FPC tidak ada)
+          echo === Cek choco bin ===
+          where fpc 2>nul || echo fpc tidak ada di PATH
+
+      - name: Set FPC path
+        shell: pwsh
+        run: |
+          $fpc = where.exe fpc 2>$null
+          if ($fpc) {
+            $dir = Split-Path $fpc -Parent
+            Write-Host "FPC in PATH: $dir"
             echo "FPC_DIR=$dir" >> $env:GITHUB_ENV
-            echo "$dir" >> $env:GITHUB_PATH
+          } elseif (Test-Path "C:\FPC") {
+            $found = Get-ChildItem "C:\FPC" -Recurse -Filter "fpc.exe" | Select-Object -First 1
+            if ($found) {
+              Write-Host "FPC found: $($found.DirectoryName)"
+              echo "FPC_DIR=$($found.DirectoryName)" >> $env:GITHUB_ENV
+              echo "$($found.DirectoryName)" >> $env:GITHUB_PATH
+            }
           } else {
-            Write-Error "fpc.exe not found!"
+            Write-Error "fpc.exe not found anywhere!"
             exit 1
           }
 
       - name: Show FPC version
-        run: fpc -iV
+        shell: cmd
+        run: |
+          "%FPC_DIR%\fpc.exe" -iV
 
       - name: Create output directories
+        shell: cmd
         run: |
-          New-Item -ItemType Directory -Force -Path bin
-          New-Item -ItemType Directory -Force -Path output
+          if not exist bin mkdir bin
+          if not exist output mkdir output
 
       - name: Build DCU32INT
-        run: fpc -Mdelphi -O2 -FUoutput -FEbin -dXMLx86 DCU32INT.dpr
+        shell: cmd
+        run: |
+          "%FPC_DIR%\fpc.exe" -Mdelphi -O2 -FUoutput -FEbin -dXMLx86 DCU32INT.dpr
 
       - name: Verify binary
+        shell: cmd
         run: |
           dir bin\
-          .\bin\dcu32int.exe -h
+          bin\dcu32int.exe -h
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
