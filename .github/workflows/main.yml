@@ -16,53 +16,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Download FPC installer
-        shell: pwsh
-        run: |
-          # Pakai mirror langsung, bukan redirect SourceForge
-          $url = "https://sourceforge.net/projects/freepascal/files/Win32/3.2.2/fpc-3.2.2.i386-win32.exe/download"
-          $installer = "C:\fpc-setup.exe"
-          Write-Host "Downloading FPC from $url ..."
-          $client = New-Object System.Net.WebClient
-          $client.DownloadFile($url, $installer)
-          $size = (Get-Item $installer).Length
-          Write-Host "Downloaded: $size bytes"
-          if ($size -lt 1MB) {
-            Write-Error "File terlalu kecil, kemungkinan corrupt!"
-            exit 1
-          }
-
-      - name: Install FPC
-        shell: pwsh
-        run: |
-          Write-Host "Installing FPC..."
-          $proc = Start-Process -FilePath "C:\fpc-setup.exe" `
-            -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/DIR=C:\FPC" `
-            -PassThru -Wait
-          Write-Host "Exit code: $($proc.ExitCode)"
-          if ($proc.ExitCode -ne 0) {
-            Write-Error "Installer gagal dengan exit code $($proc.ExitCode)"
-            exit 1
-          }
-
-      - name: Set FPC path
-        shell: pwsh
-        run: |
-          $found = Get-ChildItem "C:\FPC" -Recurse -Filter "fpc.exe" | Select-Object -First 1
-          if ($found) {
-            $dir = $found.DirectoryName
-            Write-Host "FPC found at: $dir"
-            Add-Content $env:GITHUB_ENV "FPC_DIR=$dir"
-            Add-Content $env:GITHUB_PATH "$dir"
-          } else {
-            Write-Error "fpc.exe not found setelah install!"
-            exit 1
-          }
+      - name: Setup FPC via fpcupdeluxe action
+        uses: gcarreno/setup-lazarus@v3.2.3
+        with:
+          lazarus-version: "stable"
+          include-portable-exe: true
 
       - name: Show FPC version
         shell: pwsh
-        run: |
-          & "$env:FPC_DIR\fpc.exe" -iV
+        run: fpc -iV
 
       - name: Create output directories
         shell: pwsh
@@ -73,7 +35,7 @@ jobs:
       - name: Build DCU32INT
         shell: pwsh
         run: |
-          & "$env:FPC_DIR\fpc.exe" -Mdelphi -O2 -FUoutput -FEbin -dXMLx86 DCU32INT.dpr
+          fpc -Mdelphi -O2 -FUoutput -FEbin -dXMLx86 DCU32INT.dpr
 
       - name: Verify binary
         shell: pwsh
@@ -94,6 +56,21 @@ jobs:
     needs: build-windows
     if: startsWith(github.ref, 'refs/tags/v')
 
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: dcu32int-windows-x86_64
+          path: release/
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/dcu32int.exe
+          generate_release_notes: true
     permissions:
       contents: write
 
