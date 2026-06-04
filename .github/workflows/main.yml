@@ -16,49 +16,52 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Download & Install FPC
+      - name: Download FPC installer
         shell: pwsh
         run: |
           $url = "https://downloads.sourceforge.net/project/freepascal/Win32/3.2.2/fpc-3.2.2.i386-win32.exe"
           $installer = "$env:TEMP\fpc-setup.exe"
-          Write-Host "Downloading FPC installer..."
+          Write-Host "Downloading FPC..."
           Invoke-WebRequest -Uri $url -OutFile $installer -UseBasicParsing
-          Write-Host "Installing FPC silently..."
-          Start-Process -FilePath $installer -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /DIR=C:\FPC" -Wait
-          Write-Host "Install done."
+          Write-Host "Installing FPC..."
+          Start-Process -FilePath $installer -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/DIR=C:\FPC" -Wait
+          Write-Host "Done."
 
       - name: Set FPC path
         shell: pwsh
         run: |
           $found = Get-ChildItem "C:\FPC" -Recurse -Filter "fpc.exe" | Select-Object -First 1
           if ($found) {
-            Write-Host "FPC found: $($found.DirectoryName)"
-            echo "FPC_DIR=$($found.DirectoryName)" >> $env:GITHUB_ENV
-            echo "$($found.DirectoryName)" >> $env:GITHUB_PATH
+            $dir = $found.DirectoryName
+            Write-Host "FPC found at: $dir"
+            Add-Content $env:GITHUB_ENV "FPC_DIR=$dir"
+            Add-Content $env:GITHUB_PATH "$dir"
           } else {
-            Write-Error "fpc.exe not found after install!"
+            Write-Error "fpc.exe not found!"
             exit 1
           }
 
       - name: Show FPC version
-        shell: cmd
-        run: "%FPC_DIR%\fpc.exe" -iV
+        shell: pwsh
+        run: |
+          & "$env:FPC_DIR\fpc.exe" -iV
 
       - name: Create output directories
-        shell: cmd
+        shell: pwsh
         run: |
-          if not exist bin mkdir bin
-          if not exist output mkdir output
+          New-Item -ItemType Directory -Force -Path bin | Out-Null
+          New-Item -ItemType Directory -Force -Path output | Out-Null
 
       - name: Build DCU32INT
-        shell: cmd
-        run: "%FPC_DIR%\fpc.exe" -Mdelphi -O2 -FUoutput -FEbin -dXMLx86 DCU32INT.dpr
+        shell: pwsh
+        run: |
+          & "$env:FPC_DIR\fpc.exe" -Mdelphi -O2 -FUoutput -FEbin -dXMLx86 DCU32INT.dpr
 
       - name: Verify binary
-        shell: cmd
+        shell: pwsh
         run: |
-          dir bin\
-          bin\dcu32int.exe -h
+          Get-ChildItem bin\
+          & ".\bin\dcu32int.exe" -h
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
