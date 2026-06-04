@@ -32,7 +32,9 @@ jobs:
 
       - name: Build DCU32INT
         run: |
-          fpc -Mdelphi -O2 -FUoutput -FEbin -dXMLx86 DCU32INT.dpr
+          fpc -Mdelphi -O2 -FUoutput -FEbin DCU32INT.dpr
+        # Catatan: -dXMLx86 sengaja dihapus karena unit x86Op.pas dan DAsmUtil.pas
+        # menggunakan identifier Delphi-specific (CurREX) yang tidak kompatibel dengan FPC.
 
       - name: Verify binary
         run: |
