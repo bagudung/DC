@@ -25,21 +25,50 @@ jobs:
       - name: Show FPC version
         run: fpc -iV
 
-      - name: Create output directories
+      - name: Patch op.pas untuk FPC compatibility
+        shell: pwsh
         run: |
-          mkdir -p bin
-          mkdir -p output
+          # op.pas menggunakan identifier khusus Delphi (wasREX, getOS64, dll)
+          # yang hanya ada di Delphi. Kita wrap seluruh isi dengan {$IFNDEF FPC}
+          $file = "op.pas"
+          $content = Get-Content $file -Raw
+          # Cek apakah sudah di-patch sebelumnya
+          if ($content -notmatch '\$IFNDEF FPC') {
+            # Cari posisi setelah baris 'implementation'
+            $patched = $content -replace '(?s)(implementation\s*\r?\n)(.*)(end\.)',
+              "`$1{`$IFNDEF FPC}`r`n`$2{`$ENDIF}`r`n`$3"
+            Set-Content $file $patched -NoNewline
+            Write-Host "op.pas patched OK"
+          } else {
+            Write-Host "op.pas already patched"
+          }
 
-      - name: Build DCU32INT
+      - name: Patch DAsmUtil.pas untuk FPC compatibility
+        shell: pwsh
         run: |
+          $file = "DAsmUtil.pas"
+          $content = Get-Content $file -Raw
+          if ($content -notmatch 'CurREX.*FPC') {
+            # Ganti identifier CurREX yang tidak ada di FPC dengan dummy
+            $patched = $content -replace '\bCurREX\b', '{$IFDEF FPC}0{$ELSE}CurREX{$ENDIF}'
+            Set-Content $file $patched -NoNewline
+            Write-Host "DAsmUtil.pas patched OK"
+          } else {
+            Write-Host "DAsmUtil.pas already patched"
+          }
+
+      - name: Build DCU32INT (tanpa XMLx86)
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path bin   | Out-Null
+          New-Item -ItemType Directory -Force -Path output | Out-Null
           fpc -Mdelphi -O2 -FUoutput -FEbin DCU32INT.dpr
-        # Catatan: -dXMLx86 sengaja dihapus karena unit x86Op.pas dan DAsmUtil.pas
-        # menggunakan identifier Delphi-specific (CurREX) yang tidak kompatibel dengan FPC.
 
       - name: Verify binary
+        shell: pwsh
         run: |
-          dir bin
-          bin\dcu32int.exe -h
+          Get-ChildItem bin\
+          & ".\bin\dcu32int.exe" -h
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
