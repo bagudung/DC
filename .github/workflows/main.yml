@@ -16,42 +16,33 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Install Free Pascal via Chocolatey
-        shell: cmd
-        run: choco install freepascal --no-progress -y
-
-      - name: Find FPC path (debug)
-        shell: cmd
+      - name: Download & Install FPC
+        shell: pwsh
         run: |
-          echo === Cek C:\FPC ===
-          if exist "C:\FPC" (dir "C:\FPC" /s /b) else (echo C:\FPC tidak ada)
-          echo === Cek choco bin ===
-          where fpc 2>nul || echo fpc tidak ada di PATH
+          $url = "https://downloads.sourceforge.net/project/freepascal/Win32/3.2.2/fpc-3.2.2.i386-win32.exe"
+          $installer = "$env:TEMP\fpc-setup.exe"
+          Write-Host "Downloading FPC installer..."
+          Invoke-WebRequest -Uri $url -OutFile $installer -UseBasicParsing
+          Write-Host "Installing FPC silently..."
+          Start-Process -FilePath $installer -ArgumentList "/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /DIR=C:\FPC" -Wait
+          Write-Host "Install done."
 
       - name: Set FPC path
         shell: pwsh
         run: |
-          $fpc = where.exe fpc 2>$null
-          if ($fpc) {
-            $dir = Split-Path $fpc -Parent
-            Write-Host "FPC in PATH: $dir"
-            echo "FPC_DIR=$dir" >> $env:GITHUB_ENV
-          } elseif (Test-Path "C:\FPC") {
-            $found = Get-ChildItem "C:\FPC" -Recurse -Filter "fpc.exe" | Select-Object -First 1
-            if ($found) {
-              Write-Host "FPC found: $($found.DirectoryName)"
-              echo "FPC_DIR=$($found.DirectoryName)" >> $env:GITHUB_ENV
-              echo "$($found.DirectoryName)" >> $env:GITHUB_PATH
-            }
+          $found = Get-ChildItem "C:\FPC" -Recurse -Filter "fpc.exe" | Select-Object -First 1
+          if ($found) {
+            Write-Host "FPC found: $($found.DirectoryName)"
+            echo "FPC_DIR=$($found.DirectoryName)" >> $env:GITHUB_ENV
+            echo "$($found.DirectoryName)" >> $env:GITHUB_PATH
           } else {
-            Write-Error "fpc.exe not found anywhere!"
+            Write-Error "fpc.exe not found after install!"
             exit 1
           }
 
       - name: Show FPC version
         shell: cmd
-        run: |
-          "%FPC_DIR%\fpc.exe" -iV
+        run: "%FPC_DIR%\fpc.exe" -iV
 
       - name: Create output directories
         shell: cmd
@@ -61,8 +52,7 @@ jobs:
 
       - name: Build DCU32INT
         shell: cmd
-        run: |
-          "%FPC_DIR%\fpc.exe" -Mdelphi -O2 -FUoutput -FEbin -dXMLx86 DCU32INT.dpr
+        run: "%FPC_DIR%\fpc.exe" -Mdelphi -O2 -FUoutput -FEbin -dXMLx86 DCU32INT.dpr
 
       - name: Verify binary
         shell: cmd
