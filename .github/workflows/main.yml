@@ -19,13 +19,31 @@ jobs:
       - name: Download FPC installer
         shell: pwsh
         run: |
-          $url = "https://downloads.sourceforge.net/project/freepascal/Win32/3.2.2/fpc-3.2.2.i386-win32.exe"
-          $installer = "$env:TEMP\fpc-setup.exe"
-          Write-Host "Downloading FPC..."
-          Invoke-WebRequest -Uri $url -OutFile $installer -UseBasicParsing
+          # Pakai mirror langsung, bukan redirect SourceForge
+          $url = "https://sourceforge.net/projects/freepascal/files/Win32/3.2.2/fpc-3.2.2.i386-win32.exe/download"
+          $installer = "C:\fpc-setup.exe"
+          Write-Host "Downloading FPC from $url ..."
+          $client = New-Object System.Net.WebClient
+          $client.DownloadFile($url, $installer)
+          $size = (Get-Item $installer).Length
+          Write-Host "Downloaded: $size bytes"
+          if ($size -lt 1MB) {
+            Write-Error "File terlalu kecil, kemungkinan corrupt!"
+            exit 1
+          }
+
+      - name: Install FPC
+        shell: pwsh
+        run: |
           Write-Host "Installing FPC..."
-          Start-Process -FilePath $installer -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/DIR=C:\FPC" -Wait
-          Write-Host "Done."
+          $proc = Start-Process -FilePath "C:\fpc-setup.exe" `
+            -ArgumentList "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/DIR=C:\FPC" `
+            -PassThru -Wait
+          Write-Host "Exit code: $($proc.ExitCode)"
+          if ($proc.ExitCode -ne 0) {
+            Write-Error "Installer gagal dengan exit code $($proc.ExitCode)"
+            exit 1
+          }
 
       - name: Set FPC path
         shell: pwsh
@@ -37,7 +55,7 @@ jobs:
             Add-Content $env:GITHUB_ENV "FPC_DIR=$dir"
             Add-Content $env:GITHUB_PATH "$dir"
           } else {
-            Write-Error "fpc.exe not found!"
+            Write-Error "fpc.exe not found setelah install!"
             exit 1
           }
 
